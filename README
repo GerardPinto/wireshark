@@ -1,10 +1,10 @@
 Specific Dissector Information
 ------------------------------
 
-Topic: extend wireshark dissector for SIM/USIM traces <br>
-Dissector file: packet-gsm_sim <br> <br>
+Topic: extend wireshark dissector for SIM/USIM traces
+Dissector file: packet-gsm_sim
 
-Description taken from http://osmocom.org/issues/1724 <br>
-Right now we only decode at the ISO7816-3 level, i.e. you see SELECT FILE, READ BINARY etc, but without a decode of the actual data that is read/written. So for example, you get a hex string instead of an SMS record that is decoded with sender/recipient information, timestamps, etc. <br> <br>
+Description taken from http://osmocom.org/issues/1724
+Right now we only decode at the ISO7816-3 level, i.e. you see SELECT FILE, READ BINARY etc, but without a decode of the actual data that is read/written. So for example, you get a hex string instead of an SMS record that is decoded with sender/recipient information, timestamps, etc.
 
-This ticket is about extending wireshark to decode more, both at the APDU level (where we already decode things like TERMINAL PROFILE) but also on the 'file contents' level. Code should be developed against latest upstream wireshark and submitted via their gerrit. <br>
+This ticket is about extending wireshark to decode more, both at the APDU level (where we already decode things like TERMINAL PROFILE) but also on the 'file contents' level. Code should be developed against latest upstream wireshark and submitted via their gerrit.
