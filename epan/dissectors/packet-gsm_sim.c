@@ -370,6 +370,7 @@ static int ett_acc_cnd_b9 = -1;
 static int ett_acc_cnd_b10 = -1;
 static int ett_acc_cnd_b11 = -1;
 static int ett_file_status = -1;
+static int ett_ef_resp_b8 = -1;
 
 /* 'GET RESPONSE' response parameters in case of MF/DF */
 static int hf_resp_mfdf_total_mem_not_alloc_dfef = -1;
@@ -392,6 +393,7 @@ static int hf_resp_ef_acc_cond_b11 = -1;
 static int hf_resp_ef_file_status = -1;
 static int hf_resp_ef_file_struct = -1;
 static int hf_resp_ef_rec_len = -1;
+static int hf_resp_ef_follow_dt_rfu = -1;
 
 /* 'GET RESPONSE' common response parameters in case of MF/DF/EF */
 static int hf_resp_rfu = -1;
@@ -411,6 +413,10 @@ static int hf_resp_ef_file_status_invalidate = -1;
 static int hf_resp_ef_file_status_rfu_1 = -1;
 static int hf_resp_ef_file_status_read_update = -1;
 static int hf_resp_ef_file_status_rfu_2 = -1;
+
+/* EF response byte 8 */
+static int hf_resp_ef_b8_rfu = -1;
+static int hf_resp_ef_b8_increase = -1;
 
 static dissector_handle_t sub_handle_cap;
 static dissector_handle_t sim_handle;
@@ -765,6 +771,12 @@ static const int *hf_resp_ef_file_status_fields[] = {
 	&hf_resp_ef_file_status_rfu_1,
 	&hf_resp_ef_file_status_read_update,
 	&hf_resp_ef_file_status_rfu_2,
+	NULL
+};
+
+static const int *hf_resp_ef_b8_fields[] = {
+	&hf_resp_ef_b8_rfu,
+	&hf_resp_ef_b8_increase,
 	NULL
 };
 
@@ -1315,7 +1327,7 @@ dissect_bertlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
 		proto_tree_add_bitmask(tree, tvb, offset++, hf_tprof_b##byte, ett_tprof_b##byte, tprof_b##byte##_fields, ENC_BIG_ENDIAN);
 
 #define ADD_ACC_CND_BYTE(byte) \
-		proto_tree_add_bitmask(tree, tvb, acc_cnd_offset, hf_resp_ef_acc_cond_b##byte, ett_acc_cnd_b##byte, acc_cond_b##byte##_fields, ENC_BIG_ENDIAN);
+		proto_tree_add_bitmask(tree, tvb, acc_cnd_offset++, hf_resp_ef_acc_cond_b##byte, ett_acc_cnd_b##byte, acc_cond_b##byte##_fields, ENC_BIG_ENDIAN);
 
 #define P1_OFFS		0
 #define P2_OFFS		1
@@ -1323,23 +1335,45 @@ dissect_bertlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
 #define DATA_OFFS	3
 
 static int
-dissect_ef_response(tvbuff_t *tvb, int offset, proto_tree *tree)
+dissect_ef_response(tvbuff_t *tvb, int offset, proto_tree *tree, guint8 p3)
 {
 	proto_tree_add_item(tree, hf_resp_rfu, tvb, offset+DATA_OFFS , 2, ENC_BIG_ENDIAN);
 	proto_tree_add_item(tree, hf_resp_ef_file_size, tvb, offset+DATA_OFFS + 2, 2, ENC_BIG_ENDIAN);
 	proto_tree_add_item(tree, hf_file_id, tvb, offset+DATA_OFFS + 4, 2, ENC_BIG_ENDIAN);
 	proto_tree_add_item(tree, hf_resp_file_type, tvb, offset+DATA_OFFS + 6, 1, ENC_BIG_ENDIAN);
-	proto_tree_add_item(tree, hf_resp_ef_b8, tvb, offset+DATA_OFFS + 7, 1, ENC_BIG_ENDIAN);
+
+	/** Check if cyclic file '0x02' structure */
+	guint8 file_structure = tvb_get_guint8(tvb, offset+DATA_OFFS + 13);	
+	if (file_structure != 0x02)
+	{
+		guint8 rfu = tvb_get_guint8(tvb, offset+DATA_OFFS + 13);
+		proto_tree_add_uint_format(tree, hf_resp_ef_b8, tvb, offset+DATA_OFFS + 7, 1, rfu, "EF response Byte 8: RFU: %02x", rfu);
+	}
+	else
+	{
+		proto_tree_add_bitmask(tree, tvb, offset+DATA_OFFS + 7, hf_resp_ef_b8, ett_ef_resp_b8, hf_resp_ef_b8_fields, ENC_BIG_ENDIAN);
+	}
+	
 	int acc_cnd_offset = offset+DATA_OFFS + 8;
 	ADD_ACC_CND_BYTE(9);
-	acc_cnd_offset = offset+DATA_OFFS + 9;
 	ADD_ACC_CND_BYTE(10);
-	acc_cnd_offset = offset+DATA_OFFS + 10;
 	ADD_ACC_CND_BYTE(11);
+
 	proto_tree_add_bitmask(tree, tvb, offset+DATA_OFFS + 11, hf_resp_ef_file_status, ett_file_status, hf_resp_ef_file_status_fields, ENC_BIG_ENDIAN);
 	proto_tree_add_item(tree, hf_resp_len_follow_data, tvb, offset+DATA_OFFS + 12, 1, ENC_BIG_ENDIAN);
-	proto_tree_add_item(tree, hf_resp_ef_file_struct, tvb, offset+DATA_OFFS + 13, 1, ENC_BIG_ENDIAN);
-	proto_tree_add_item(tree, hf_resp_ef_rec_len, tvb, offset+DATA_OFFS + 14, 1, ENC_BIG_ENDIAN);
+	
+	int length_following_data = tvb_get_guint8(tvb, offset+DATA_OFFS + 12);
+	if (length_following_data > 0)
+	{
+		proto_tree_add_item(tree, hf_resp_ef_file_struct, tvb, offset+DATA_OFFS + 13, 1, ENC_BIG_ENDIAN);
+		if(length_following_data > 1)
+		{
+			proto_tree_add_item(tree, hf_resp_ef_rec_len, tvb, offset+DATA_OFFS + 14, 1, ENC_BIG_ENDIAN);
+			if (length_following_data > 2)
+				proto_tree_add_item(tree, hf_resp_ef_follow_dt_rfu, tvb, offset+DATA_OFFS + 15, p3, ENC_BIG_ENDIAN);
+		}
+	}
+
 	return tvb_captured_length(tvb);
 }
 
@@ -1533,7 +1567,7 @@ dissect_gsm_apdu(guint8 ins, guint8 p1, guint8 p2, guint8 p3, tvbuff_t *tvb,
 				break;
 			case 0x04:
 				/** Case to dissect reponse specific to EF*/
-			dissect_ef_response(tvb, offset, tree);
+			dissect_ef_response(tvb, offset, tree, p3);
 				break;
 			default:
 				break;
@@ -1853,12 +1887,15 @@ proto_register_gsm_sim(void)
 			{ "File Size", "gsm_sim.resp.ef.file_size",
 			  FT_UINT8, BASE_DEC, NULL, 0,
 			  "Length of transparent EF or fixed/cyclic EF (record length multiplied by number of records", HFILL }
-		},		
+		},
+
+		/* Get Response: Access Condition Byte 8 of EF response */
 		{ &hf_resp_ef_b8,
 			{ "EF response Byte 8", "gsm_sim.resp.ef.b8",
 			  FT_UINT8, BASE_HEX, NULL, 0,
 			  NULL, HFILL },
 		},
+
 		{ &hf_resp_ef_acc_cond_b9,
 			{ "Access Condition Byte 9", "gsm_sim.resp.ef.access_cnd.b9",
 			  FT_UINT8, BASE_HEX, NULL, 0,
@@ -1880,12 +1917,17 @@ proto_register_gsm_sim(void)
 			  NULL, HFILL },
 		},
 		{ &hf_resp_ef_file_struct,
-			{ "File Structure", "gsm_sim.resp.ef._file_structure",
+			{ "File Structure", "gsm_sim.resp.ef.file_structure",
 			  FT_UINT8, BASE_HEX, VALS(ef_file_struct_vals), 0,
 			  NULL, HFILL }
 		},
 		{ &hf_resp_ef_rec_len,
-			{ "Length of a record", "gsm_sim.resp.ef._rec_len",
+			{ "Length of a record", "gsm_sim.resp.ef.rec_len",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_ef_follow_dt_rfu,
+			{ "RFU", "gsm_sim.resp.ef.follow_dt_rfu",
 			  FT_UINT8, BASE_DEC, NULL, 0,
 			  NULL, HFILL }
 		},
@@ -1963,6 +2005,18 @@ proto_register_gsm_sim(void)
 			{ "RFU", "gsm_sim.rsp.ef.file_status_ruf2",
 			  FT_UINT8, BASE_HEX, NULL, 0xf8,
 			  NULL, HFILL },
+		},
+
+		/** Get Response: 8th byte fields in EF response */
+		{ &hf_resp_ef_b8_increase,
+			{ "INCREASE command", "gsm_sim.rsp.ef.byte8_increase",
+			  FT_BOOLEAN, 8, TFS(&tfs_yes_no), 0x40,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_ef_b8_rfu,
+			{ "RFU", "gsm_sim.rsp.ef.byte8_rfu",
+			  FT_UINT8, BASE_HEX, NULL, 0xBF,
+			  NULL, HFILL }
 		},
 
 		/* Terminal Profile Byte 1 */
@@ -3248,7 +3302,8 @@ proto_register_gsm_sim(void)
 		&ett_acc_cnd_b9,
 		&ett_acc_cnd_b10,
 		&ett_acc_cnd_b11,
-		&ett_file_status
+		&ett_file_status,
+		&ett_ef_resp_b8
 	};
 
 	proto_gsm_sim = proto_register_protocol("GSM SIM 11.11", "GSM SIM",
