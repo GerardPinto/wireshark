@@ -366,6 +366,51 @@ static int ett_tprof_b30 = -1;
 static int ett_tprof_b31 = -1;
 static int ett_tprof_b32 = -1;
 static int ett_tprof_b33 = -1;
+static int ett_acc_cnd_b9 = -1;
+static int ett_acc_cnd_b10 = -1;
+static int ett_acc_cnd_b11 = -1;
+static int ett_file_status = -1;
+
+/* 'GET RESPONSE' response parameters in case of MF/DF */
+static int hf_resp_mfdf_total_mem_not_alloc_dfef = -1;
+static int hf_resp_mfdf_gsm_spec_file_char = -1;
+static int hf_resp_mfdf_gsm_spec_no_of_dfs = -1;
+static int hf_resp_mfdf_gsm_spec_no_of_efs = -1;
+static int hf_resp_mfdf_gsm_spec_no_of_chvs = -1;
+static int hf_resp_mfdf_gsm_spec_chv1_status = -1;
+static int hf_resp_mfdf_gsm_spec_unblock_chv1_status = -1;
+static int hf_resp_mfdf_gsm_spec_chv2_status = -1;
+static int hf_resp_mfdf_gsm_spec_unblock_chv2_status = -1;
+static int hf_resp_mfdf_gsm_spec_rsvd_adm_mgmt = -1;
+
+/* 'GET RESPONSE' response parameters in case of EF */
+static int hf_resp_ef_file_size = -1;
+static int hf_resp_ef_b8 = -1;
+static int hf_resp_ef_acc_cond_b9 = -1;
+static int hf_resp_ef_acc_cond_b10 = -1;
+static int hf_resp_ef_acc_cond_b11 = -1;
+static int hf_resp_ef_file_status = -1;
+static int hf_resp_ef_file_struct = -1;
+static int hf_resp_ef_rec_len = -1;
+
+/* 'GET RESPONSE' common response parameters in case of MF/DF/EF */
+static int hf_resp_rfu = -1;
+static int hf_resp_file_type = -1;
+static int hf_resp_len_follow_data = -1;
+
+/** Access condition in get reponse in case of EF*/
+static int hf_resp_ef_acc_cond_update = -1;
+static int hf_resp_ef_acc_cond_read = -1;
+static int hf_resp_ef_acc_cond_increase = -1;
+static int hf_resp_ef_acc_cond_rfu = -1;
+static int hf_resp_ef_acc_cond_invalidate = -1;
+static int hf_resp_ef_acc_cond_rehabilitate = -1;
+
+/* File status in get response in case of EF */
+static int hf_resp_ef_file_status_invalidate = -1;
+static int hf_resp_ef_file_status_rfu_1 = -1;
+static int hf_resp_ef_file_status_read_update = -1;
+static int hf_resp_ef_file_status_rfu_2 = -1;
 
 static dissector_handle_t sub_handle_cap;
 static dissector_handle_t sim_handle;
@@ -697,6 +742,71 @@ static const int *tprof_b33_fields[] = {
 	NULL
 };
 
+static const int *acc_cond_b9_fields[] = {
+	&hf_resp_ef_acc_cond_update,
+	&hf_resp_ef_acc_cond_read,
+	NULL
+};
+
+static const int *acc_cond_b10_fields[] = {
+	&hf_resp_ef_acc_cond_increase,
+	&hf_resp_ef_acc_cond_rfu,
+	NULL
+};
+
+static const int *acc_cond_b11_fields[] = {
+	&hf_resp_ef_acc_cond_invalidate,
+	&hf_resp_ef_acc_cond_rehabilitate,
+	NULL
+};
+
+static const int *hf_resp_ef_file_status_fields[] = {
+	&hf_resp_ef_file_status_invalidate,
+	&hf_resp_ef_file_status_rfu_1,
+	&hf_resp_ef_file_status_read_update,
+	&hf_resp_ef_file_status_rfu_2,
+	NULL
+};
+
+/* According to section 9.3 Defination and coding of ETSI GSM 11.11*/
+static const value_string access_conditions[] = {
+	{ 0x00, "Always (ALW)"},
+	{ 0x01, "Card Holder Verification1 (CHV1)"},
+	{ 0x02, "Card Holder Verification2 (CHV2)"},
+	{ 0x03, "Reserved for GSM Future Use (RFU)"},
+	{ 0x04, "Administrative Authority (ADM)"},
+	{ 0x05, "Administrative Authority (ADM)"},
+	{ 0x06, "Administrative Authority (ADM)"},
+	{ 0x07, "Administrative Authority (ADM)"},
+	{ 0x08, "Administrative Authority (ADM)"},
+	{ 0x09, "Administrative Authority (ADM)"},
+	{ 0x10, "Administrative Authority (ADM)"},
+	{ 0x0A, "Administrative Authority (ADM)"},
+	{ 0x0B, "Administrative Authority (ADM)"},
+	{ 0x0C, "Administrative Authority (ADM)"},
+	{ 0x0D, "Administrative Authority (ADM)"},
+	{ 0x0E, "Administrative Authority (ADM)"},
+	{ 0x0F, "Never (NEV)"},
+	{ 0, NULL }
+};
+
+/* According to section 9.3 Defination and coding of ETSI GSM 11.11*/
+static const value_string ef_file_struct_vals[] = {
+	{ 0x00, "Transparent" },
+	{ 0x01, "Linear Fixed" },
+	{ 0x02, "Cyclic" },
+	{ 0, NULL }
+};
+
+/* According to section 9.3 of ETSI GSM 11.11*/
+static const value_string file_type_vals[] = {
+	{ 0x00, "RFU" },
+	{ 0x01, "MF" },
+	{ 0x02, "DF" },
+	{ 0x04, "EF" },
+	{ 0, NULL }
+};
+
 /* According to Section 7.2 of ETSI TS 101 220 / Chapter 7.2 */
 /* BER-TLV tag CAT templates */
 static const value_string ber_tlv_cat_tag_vals[] = {
@@ -748,6 +858,16 @@ static const value_string apdu_cla_secure_messaging_ind_vals[] = {
 static const true_false_string apdu_cla_secure_messaging_ind_ext_val = {
 	"Command header not authenticated",
 	"No SM used between terminal and card"
+};
+
+static const true_false_string file_status_invalidate_notinvalidate = {
+	"Not invalidated",
+	"Invalidated"
+};
+
+static const true_false_string file_status_readwritable_notreadwritable = {
+	"Readable and updatable when invalidated",
+	"Not readable or updatable when invalidated"	
 };
 
 /* Table 9 of GSM TS 11.11 */
@@ -1190,15 +1310,38 @@ dissect_bertlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
 	return tvb_captured_length(tvb);
 }
 
-
 #define ADD_TP_BYTE(byte) \
 		if ((offset - start_offset) >= p3) break; \
 		proto_tree_add_bitmask(tree, tvb, offset++, hf_tprof_b##byte, ett_tprof_b##byte, tprof_b##byte##_fields, ENC_BIG_ENDIAN);
+
+#define ADD_ACC_CND_BYTE(byte) \
+		proto_tree_add_bitmask(tree, tvb, acc_cnd_offset, hf_resp_ef_acc_cond_b##byte, ett_acc_cnd_b##byte, acc_cond_b##byte##_fields, ENC_BIG_ENDIAN);
 
 #define P1_OFFS		0
 #define P2_OFFS		1
 #define P3_OFFS		2
 #define DATA_OFFS	3
+
+static int
+dissect_ef_response(tvbuff_t *tvb, int offset, proto_tree *tree)
+{
+	proto_tree_add_item(tree, hf_resp_rfu, tvb, offset+DATA_OFFS , 2, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_resp_ef_file_size, tvb, offset+DATA_OFFS + 2, 2, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_file_id, tvb, offset+DATA_OFFS + 4, 2, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_resp_file_type, tvb, offset+DATA_OFFS + 6, 1, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_resp_ef_b8, tvb, offset+DATA_OFFS + 7, 1, ENC_BIG_ENDIAN);
+	int acc_cnd_offset = offset+DATA_OFFS + 8;
+	ADD_ACC_CND_BYTE(9);
+	acc_cnd_offset = offset+DATA_OFFS + 9;
+	ADD_ACC_CND_BYTE(10);
+	acc_cnd_offset = offset+DATA_OFFS + 10;
+	ADD_ACC_CND_BYTE(11);
+	proto_tree_add_bitmask(tree, tvb, offset+DATA_OFFS + 11, hf_resp_ef_file_status, ett_file_status, hf_resp_ef_file_status_fields, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_resp_len_follow_data, tvb, offset+DATA_OFFS + 12, 1, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_resp_ef_file_struct, tvb, offset+DATA_OFFS + 13, 1, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_resp_ef_rec_len, tvb, offset+DATA_OFFS + 14, 1, ENC_BIG_ENDIAN);
+	return tvb_captured_length(tvb);
+}
 
 static int
 dissect_gsm_apdu(guint8 ins, guint8 p1, guint8 p2, guint8 p3, tvbuff_t *tvb,
@@ -1381,6 +1524,21 @@ dissect_gsm_apdu(guint8 ins, guint8 p1, guint8 p2, guint8 p3, tvbuff_t *tvb,
 		proto_tree_add_item(tree, hf_le, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
 		if (isSIMtrace) {
 			proto_tree_add_item(tree, hf_apdu_data, tvb, offset+DATA_OFFS, p3, ENC_NA);
+			
+			g8 = tvb_get_guint8(tvb, offset+DATA_OFFS + 6);
+			switch (g8) {
+			case 0x01:
+			case 0x02:
+				/** Case to dissect reponse specific to MF/DF*/
+				break;
+			case 0x04:
+				/** Case to dissect reponse specific to EF*/
+			dissect_ef_response(tvb, offset, tree);
+				break;
+			default:
+				break;
+			}
+
 		}
 		break;
 	case 0xC2: /* ENVELOPE */
@@ -1637,6 +1795,175 @@ proto_register_gsm_sim(void)
 			  "ISO 7816-4 Logical Channel Operation", HFILL }
 		},
 
+		/** Get Response: specific response parameters in case of MF/DF response dissector */
+		{ &hf_resp_mfdf_total_mem_not_alloc_dfef,
+			{ "File Characteristics", "gsm_sim.resp.mfdf.total_mem_not_alloc_dfef",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		/* Get Response: GSM specific data as given in ETSI 11.11 Section 9.2.1 for MF/DF response dissector */
+		{ &hf_resp_mfdf_gsm_spec_file_char,
+			{ "File Characteristics", "gsm_sim.resp.mfdf.gsm_spec.file_char",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_no_of_dfs,
+			{ "Number of DFs in current directory", "gsm_sim.resp.mfdf.gsm_spec.no_of_dfs",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_no_of_efs,
+			{ "File Characteristics", "gsm_sim.resp.mfdf.gsm_spec.no_of_efs",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_no_of_chvs,
+			{ "File Characteristics", "gsm_sim.resp.mfdf.gsm_spec.no_of_chvs",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_chv1_status,
+			{ "File Characteristics", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.chv1_status",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_unblock_chv1_status,
+			{ "File Characteristics", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.unblock_chv1_status",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_chv2_status,
+			{ "File Characteristics", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.chv2_status",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_unblock_chv2_status,
+			{ "File Characteristics", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.unblock_chv2_status",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_rsvd_adm_mgmt,
+			{ "File Characteristics", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.rsvd_adm_mgmt",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL }
+		},
+
+		/** Get Response: specific response parameters in case of EF response dissector */
+		{ &hf_resp_ef_file_size,
+			{ "File Size", "gsm_sim.resp.ef.file_size",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  "Length of transparent EF or fixed/cyclic EF (record length multiplied by number of records", HFILL }
+		},		
+		{ &hf_resp_ef_b8,
+			{ "EF response Byte 8", "gsm_sim.resp.ef.b8",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL },
+		},
+		{ &hf_resp_ef_acc_cond_b9,
+			{ "Access Condition Byte 9", "gsm_sim.resp.ef.access_cnd.b9",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  "Indicates Read/Seek and Update Access Conditions", HFILL },
+		},
+		{ &hf_resp_ef_acc_cond_b10,
+			{ "Access Condition Byte 10", "gsm_sim.resp.ef.access_cnd.b10",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  "Indicates Increase and RFU Access Conditions", HFILL },
+		},
+		{ &hf_resp_ef_acc_cond_b11,
+			{ "Access Condition Byte 11", "gsm_sim.resp.ef.access_cnd.b11",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  "Indicates Invalidate and Rehabilitate Access Conditions", HFILL },
+		},
+		{ &hf_resp_ef_file_status,
+			{ "File Status", "gsm_sim.resp.ef.file_status",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL },
+		},
+		{ &hf_resp_ef_file_struct,
+			{ "File Structure", "gsm_sim.resp.ef._file_structure",
+			  FT_UINT8, BASE_HEX, VALS(ef_file_struct_vals), 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_ef_rec_len,
+			{ "Length of a record", "gsm_sim.resp.ef._rec_len",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+
+		/** Get Response: common response parameters in case of MF/DF/EF */
+		{ &hf_resp_rfu,
+			{ "RFU", "gsm_sim.resp.rfu",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_file_type,
+			{ "Type of File", "gsm_sim.resp.file_type",
+			  FT_UINT8, BASE_HEX, VALS(file_type_vals), 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_len_follow_data,
+			{ "Length of following data", "gsm_sim.resp.len_follow_data",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+
+		/** Get Response: Access Condition Byte 9 of EF response */
+		{ &hf_resp_ef_acc_cond_update,
+			{ "UPDATE", "gsm_sim.resp.ef.acc_cnd_update",
+			  FT_UINT8, BASE_HEX, VALS(access_conditions), 0x0f,
+			  "Access Condition Update", HFILL }
+		},
+		{ &hf_resp_ef_acc_cond_read,
+			{ "READ/SEEK", "gsm_sim.resp.ef.acc_cnd_read",
+			  FT_UINT8, BASE_HEX, VALS(access_conditions), 0xf0,
+			  "Access Condition Read/Seek", HFILL }
+		},
+
+		/** Get Response: Access condition 10th byte of EF response */
+		{ &hf_resp_ef_acc_cond_increase,
+			{ "INCREASE", "gsm_sim.resp.ef.acc_cnd_increase",
+			  FT_UINT8, BASE_HEX, VALS(access_conditions), 0x0f,
+			  "Access Condition Increase", HFILL }
+		},
+		{ &hf_resp_ef_acc_cond_rfu,
+			{ "RFU", "gsm_sim.resp.ef.acc_cnd_rfu",
+			  FT_UINT8, BASE_HEX, VALS(access_conditions), 0xf0,
+			  "Access Condition RFU", HFILL }
+		},
+
+		/** Get Response: Access condition 11th byte in EF response */
+		{ &hf_resp_ef_acc_cond_invalidate,
+			{ "INVALIDATE", "gsm_sim.resp.ef.acc_cnd_invalidate",
+			  FT_UINT8, BASE_HEX, VALS(access_conditions), 0x0f,
+			  "Access Condition Invalidate", HFILL }
+		},
+		{ &hf_resp_ef_acc_cond_rehabilitate,
+			{ "REHABILITATE", "gsm_sim.resp.ef.acc_cnd_rehabilitate",
+			  FT_UINT8, BASE_HEX, VALS(access_conditions), 0xf0,
+			  "Access Condition Rehabilitate", HFILL }
+		},
+
+		/** Get Response: File Status 12th byte in EF response */
+		{ &hf_resp_ef_file_status_invalidate,
+			{ "Validation Status", "gsm_sim.rsp.ef.file_status_invalidate",
+			  FT_BOOLEAN, 8, TFS(&file_status_invalidate_notinvalidate), 0x01,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_ef_file_status_rfu_1,
+			{ "RFU", "gsm_sim.rsp.ef.file_status_invalidate_rfu1",
+			  FT_UINT8, BASE_HEX, NULL, 0x02,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_ef_file_status_read_update,
+			{ "Read Update Status", "gsm_sim.rsp.ef.file_status_read_update",
+			  FT_BOOLEAN, 8, TFS(&file_status_readwritable_notreadwritable), 0x04,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_ef_file_status_rfu_2,
+			{ "RFU", "gsm_sim.rsp.ef.file_status_ruf2",
+			  FT_UINT8, BASE_HEX, NULL, 0xf8,
+			  NULL, HFILL },
+		},
 
 		/* Terminal Profile Byte 1 */
 		{ &hf_tprof_b1,
@@ -2917,7 +3244,11 @@ proto_register_gsm_sim(void)
 		&ett_tprof_b30,
 		&ett_tprof_b31,
 		&ett_tprof_b32,
-		&ett_tprof_b33
+		&ett_tprof_b33,
+		&ett_acc_cnd_b9,
+		&ett_acc_cnd_b10,
+		&ett_acc_cnd_b11,
+		&ett_file_status
 	};
 
 	proto_gsm_sim = proto_register_protocol("GSM SIM 11.11", "GSM SIM",
