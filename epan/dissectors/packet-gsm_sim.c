@@ -1327,50 +1327,55 @@ dissect_bertlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
 		proto_tree_add_bitmask(tree, tvb, offset++, hf_tprof_b##byte, ett_tprof_b##byte, tprof_b##byte##_fields, ENC_BIG_ENDIAN);
 
 #define ADD_ACC_CND_BYTE(byte) \
-		proto_tree_add_bitmask(tree, tvb, acc_cnd_offset++, hf_resp_ef_acc_cond_b##byte, ett_acc_cnd_b##byte, acc_cond_b##byte##_fields, ENC_BIG_ENDIAN);
+		proto_tree_add_bitmask(tree, tvb, byte, hf_resp_ef_acc_cond_b##byte, ett_acc_cnd_b##byte, acc_cond_b##byte##_fields, ENC_BIG_ENDIAN);
 
 #define P1_OFFS		0
 #define P2_OFFS		1
 #define P3_OFFS		2
 #define DATA_OFFS	3
 
+/**
+* The following dissects EF response in get response apdu
+* Refer ETSI GSM 11.11 Section 9.2.1
+* Each byte is coded as per the spec given in 
+* Response parameters/data in case of an EF
+*/
 static int
-dissect_ef_response(tvbuff_t *tvb, int offset, proto_tree *tree, guint8 p3)
+dissect_ef_response(tvbuff_t *tvb, proto_tree *tree, guint8 p3)
 {
-	proto_tree_add_item(tree, hf_resp_rfu, tvb, offset+DATA_OFFS , 2, ENC_BIG_ENDIAN);
-	proto_tree_add_item(tree, hf_resp_ef_file_size, tvb, offset+DATA_OFFS + 2, 2, ENC_BIG_ENDIAN);
-	proto_tree_add_item(tree, hf_file_id, tvb, offset+DATA_OFFS + 4, 2, ENC_BIG_ENDIAN);
-	proto_tree_add_item(tree, hf_resp_file_type, tvb, offset+DATA_OFFS + 6, 1, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_resp_rfu, tvb, 0 , 2, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_resp_ef_file_size, tvb, 2, 2, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_file_id, tvb, 4, 2, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_resp_file_type, tvb, 6, 1, ENC_BIG_ENDIAN);
 
 	/** Check if cyclic file '0x02' structure */
-	guint8 file_structure = tvb_get_guint8(tvb, offset+DATA_OFFS + 13);	
+	guint8 file_structure = tvb_get_guint8(tvb, 13);
 	if (file_structure != 0x02)
 	{
-		guint8 rfu = tvb_get_guint8(tvb, offset+DATA_OFFS + 13);
-		proto_tree_add_uint_format(tree, hf_resp_ef_b8, tvb, offset+DATA_OFFS + 7, 1, rfu, "EF response Byte 8: RFU: %02x", rfu);
+		guint8 rfu = tvb_get_guint8(tvb, 7);
+		proto_tree_add_uint_format(tree, hf_resp_ef_b8, tvb, 7, 1, rfu, "EF response Byte 8: RFU: %02x", rfu);
 	}
 	else
 	{
-		proto_tree_add_bitmask(tree, tvb, offset+DATA_OFFS + 7, hf_resp_ef_b8, ett_ef_resp_b8, hf_resp_ef_b8_fields, ENC_BIG_ENDIAN);
+		proto_tree_add_bitmask(tree, tvb, 7, hf_resp_ef_b8, ett_ef_resp_b8, hf_resp_ef_b8_fields, ENC_BIG_ENDIAN);
 	}
-	
-	int acc_cnd_offset = offset+DATA_OFFS + 8;
+
 	ADD_ACC_CND_BYTE(9);
 	ADD_ACC_CND_BYTE(10);
 	ADD_ACC_CND_BYTE(11);
 
-	proto_tree_add_bitmask(tree, tvb, offset+DATA_OFFS + 11, hf_resp_ef_file_status, ett_file_status, hf_resp_ef_file_status_fields, ENC_BIG_ENDIAN);
-	proto_tree_add_item(tree, hf_resp_len_follow_data, tvb, offset+DATA_OFFS + 12, 1, ENC_BIG_ENDIAN);
+	proto_tree_add_bitmask(tree, tvb, 11, hf_resp_ef_file_status, ett_file_status, hf_resp_ef_file_status_fields, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_resp_len_follow_data, tvb, 12, 1, ENC_BIG_ENDIAN);
 	
-	int length_following_data = tvb_get_guint8(tvb, offset+DATA_OFFS + 12);
+	int length_following_data = tvb_get_guint8(tvb, 12);
 	if (length_following_data > 0)
 	{
-		proto_tree_add_item(tree, hf_resp_ef_file_struct, tvb, offset+DATA_OFFS + 13, 1, ENC_BIG_ENDIAN);
+		proto_tree_add_item(tree, hf_resp_ef_file_struct, tvb, 13, 1, ENC_BIG_ENDIAN);
 		if(length_following_data > 1)
 		{
-			proto_tree_add_item(tree, hf_resp_ef_rec_len, tvb, offset+DATA_OFFS + 14, 1, ENC_BIG_ENDIAN);
+			proto_tree_add_item(tree, hf_resp_ef_rec_len, tvb, 14, 1, ENC_BIG_ENDIAN);
 			if (length_following_data > 2)
-				proto_tree_add_item(tree, hf_resp_ef_follow_dt_rfu, tvb, offset+DATA_OFFS + 15, p3, ENC_BIG_ENDIAN);
+				proto_tree_add_item(tree, hf_resp_ef_follow_dt_rfu, tvb, 15, p3, ENC_BIG_ENDIAN);
 		}
 	}
 
@@ -1567,7 +1572,8 @@ dissect_gsm_apdu(guint8 ins, guint8 p1, guint8 p2, guint8 p3, tvbuff_t *tvb,
 				break;
 			case 0x04:
 				/** Case to dissect reponse specific to EF*/
-			dissect_ef_response(tvb, offset, tree, p3);
+				subtvb = tvb_new_subset_length(tvb, offset+DATA_OFFS, p3);
+				dissect_ef_response(subtvb, tree, p3);
 				break;
 			default:
 				break;
