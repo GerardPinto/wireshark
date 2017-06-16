@@ -373,16 +373,23 @@ static int ett_file_status = -1;
 static int ett_ef_resp_b8 = -1;
 
 /* 'GET RESPONSE' response parameters in case of MF/DF */
+//static int hf_resp_mfdf_gsm_spec_dt = -1;
+static int hf_resp_mfdf_rfu_1 = -1;
 static int hf_resp_mfdf_total_mem_not_alloc_dfef = -1;
-static int hf_resp_mfdf_gsm_spec_file_char = -1;
-static int hf_resp_mfdf_gsm_spec_no_of_dfs = -1;
-static int hf_resp_mfdf_gsm_spec_no_of_efs = -1;
-static int hf_resp_mfdf_gsm_spec_no_of_chvs = -1;
-static int hf_resp_mfdf_gsm_spec_chv1_status = -1;
-static int hf_resp_mfdf_gsm_spec_unblock_chv1_status = -1;
-static int hf_resp_mfdf_gsm_spec_chv2_status = -1;
-static int hf_resp_mfdf_gsm_spec_unblock_chv2_status = -1;
-static int hf_resp_mfdf_gsm_spec_rsvd_adm_mgmt = -1;
+static int hf_resp_mfdf_rfu_2 = -1;
+/* gsm specific data in get reponse mf/df*/
+static int hf_resp_mfdf_gsm_spec_b14 = -1;
+static int hf_resp_mfdf_gsm_spec_b15 = -1;
+static int hf_resp_mfdf_gsm_spec_b16 = -1;
+static int hf_resp_mfdf_gsm_spec_b17 = -1;
+static int hf_resp_mfdf_gsm_spec_b18 = -1;
+static int hf_resp_mfdf_gsm_spec_b19 = -1;
+static int hf_resp_mfdf_gsm_spec_b20 = -1;
+static int hf_resp_mfdf_gsm_spec_b21 = -1;
+static int hf_resp_mfdf_gsm_spec_b22 = -1;
+static int hf_resp_mfdf_gsm_spec_b23 = -1;
+static int hf_resp_mfdf_gsm_spec_b24 = -1;
+static int hf_resp_mfdf_gsm_rfu_5_b35 = -1;
 
 /* 'GET RESPONSE' response parameters in case of EF */
 static int hf_resp_ef_file_size = -1;
@@ -1329,15 +1336,61 @@ dissect_bertlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
 #define ADD_ACC_CND_BYTE(byte) \
 		proto_tree_add_bitmask(tree, tvb, byte, hf_resp_ef_acc_cond_b##byte, ett_acc_cnd_b##byte, acc_cond_b##byte##_fields, ENC_BIG_ENDIAN);
 
+#define ADD_GSM_SPEC_ITEM(byte) \
+		proto_tree_add_item(tree, hf_resp_mfdf_gsm_spec_b##byte, tvb, byte-1, 1, ENC_BIG_ENDIAN);
+
 #define P1_OFFS		0
 #define P2_OFFS		1
 #define P3_OFFS		2
 #define DATA_OFFS	3
 
 /**
-* The following dissects EF response in get response apdu
+* The following dissects MF or DF response in get response apdu
 * Refer ETSI GSM 11.11 Section 9.2.1
 * Each byte is coded as per the spec given in 
+* Response parameters/data in case of an EF
+*/
+static int
+dissect_mf_or_df_response(tvbuff_t *tvb, proto_tree *tree, guint8 p3)
+{
+	proto_tree_add_item(tree, hf_resp_mfdf_rfu_1, tvb, 0 , 2, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_resp_mfdf_total_mem_not_alloc_dfef, tvb, 2 , 2, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_file_id, tvb, 4, 2, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_resp_file_type, tvb, 6, 1, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_resp_mfdf_rfu_2, tvb, 7 , 5, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_resp_len_follow_data, tvb, 12, 1, ENC_BIG_ENDIAN);
+
+	/* GSM specific data */
+	//proto_tree_add_item(tree, hf_resp_mfdf_gsm_spec_dt, tvb, 0, p3, ENC_BIG_ENDIAN);
+	ADD_GSM_SPEC_ITEM(14);
+	ADD_GSM_SPEC_ITEM(15);
+	ADD_GSM_SPEC_ITEM(16);
+	ADD_GSM_SPEC_ITEM(17);
+	ADD_GSM_SPEC_ITEM(18);
+	ADD_GSM_SPEC_ITEM(19);
+	ADD_GSM_SPEC_ITEM(20);
+	ADD_GSM_SPEC_ITEM(21);
+	ADD_GSM_SPEC_ITEM(22);
+	ADD_GSM_SPEC_ITEM(23);
+	
+	int diff = p3 - 22;
+	if (diff > 0) {
+		if (diff > 11) {
+			proto_tree_add_item(tree, hf_resp_mfdf_gsm_spec_b24, tvb, 23, 11, ENC_BIG_ENDIAN);
+			proto_tree_add_item(tree, hf_resp_mfdf_gsm_rfu_5_b35, tvb, 34, p3, ENC_NA);
+		}
+		else {
+			proto_tree_add_item(tree, hf_resp_mfdf_gsm_spec_b24, tvb, 23, diff - 1, ENC_BIG_ENDIAN);
+		}
+	}
+
+	return tvb_captured_length(tvb);
+}
+
+/**
+* The following dissects EF response in get response apdu
+* Refer ETSI GSM 11.11 Section 9.2.1
+* Each byte is coded as per the spec given in
 * Response parameters/data in case of an EF
 */
 static int
@@ -1350,13 +1403,11 @@ dissect_ef_response(tvbuff_t *tvb, proto_tree *tree, guint8 p3)
 
 	/** Check if cyclic file '0x02' structure */
 	guint8 file_structure = tvb_get_guint8(tvb, 13);
-	if (file_structure != 0x02)
-	{
+	if (file_structure != 0x02) {
 		guint8 rfu = tvb_get_guint8(tvb, 7);
 		proto_tree_add_uint_format(tree, hf_resp_ef_b8, tvb, 7, 1, rfu, "EF response Byte 8: RFU: %02x", rfu);
 	}
-	else
-	{
+	else {
 		proto_tree_add_bitmask(tree, tvb, 7, hf_resp_ef_b8, ett_ef_resp_b8, hf_resp_ef_b8_fields, ENC_BIG_ENDIAN);
 	}
 
@@ -1368,11 +1419,10 @@ dissect_ef_response(tvbuff_t *tvb, proto_tree *tree, guint8 p3)
 	proto_tree_add_item(tree, hf_resp_len_follow_data, tvb, 12, 1, ENC_BIG_ENDIAN);
 	
 	int length_following_data = tvb_get_guint8(tvb, 12);
-	if (length_following_data > 0)
-	{
+	if (length_following_data > 0) {
 		proto_tree_add_item(tree, hf_resp_ef_file_struct, tvb, 13, 1, ENC_BIG_ENDIAN);
-		if(length_following_data > 1)
-		{
+		
+		if(length_following_data > 1) {
 			proto_tree_add_item(tree, hf_resp_ef_rec_len, tvb, 14, 1, ENC_BIG_ENDIAN);
 			if (length_following_data > 2)
 				proto_tree_add_item(tree, hf_resp_ef_follow_dt_rfu, tvb, 15, p3, ENC_BIG_ENDIAN);
@@ -1563,16 +1613,17 @@ dissect_gsm_apdu(guint8 ins, guint8 p1, guint8 p2, guint8 p3, tvbuff_t *tvb,
 		proto_tree_add_item(tree, hf_le, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
 		if (isSIMtrace) {
 			proto_tree_add_item(tree, hf_apdu_data, tvb, offset+DATA_OFFS, p3, ENC_NA);
-			
 			g8 = tvb_get_guint8(tvb, offset+DATA_OFFS + 6);
+			subtvb = tvb_new_subset_length(tvb, offset+DATA_OFFS, p3);
+
 			switch (g8) {
 			case 0x01:
 			case 0x02:
 				/** Case to dissect reponse specific to MF/DF*/
+				dissect_mf_or_df_response(subtvb, tree, p3);
 				break;
 			case 0x04:
 				/** Case to dissect reponse specific to EF*/
-				subtvb = tvb_new_subset_length(tvb, offset+DATA_OFFS, p3);
 				dissect_ef_response(subtvb, tree, p3);
 				break;
 			default:
@@ -1834,57 +1885,87 @@ proto_register_gsm_sim(void)
 			  FT_UINT8, BASE_HEX, VALS(chan_op_vals), 0,
 			  "ISO 7816-4 Logical Channel Operation", HFILL }
 		},
-
-		/** Get Response: specific response parameters in case of MF/DF response dissector */
-		{ &hf_resp_mfdf_total_mem_not_alloc_dfef,
-			{ "File Characteristics", "gsm_sim.resp.mfdf.total_mem_not_alloc_dfef",
-			  FT_UINT8, BASE_DEC, NULL, 0,
+		/** Get Response: specific response parameters in case of MF/DF response dissector 
+		{ &hf_resp_mfdf_gsm_spec_dt,
+			{ "GSM specific data", "gsm_sim.resp.mfdf.gsm_spec.data",
+			  FT_UINT8, BASE_HEX, NULL, 0,
 			  NULL, HFILL }
 		},
+		*/
 		/* Get Response: GSM specific data as given in ETSI 11.11 Section 9.2.1 for MF/DF response dissector */
-		{ &hf_resp_mfdf_gsm_spec_file_char,
+		{ &hf_resp_mfdf_rfu_1,
+			{ "RFU", "gsm_sim.resp.mfdf.resp.mfdf.rfu1",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_total_mem_not_alloc_dfef,
+			{ "Total amount of memory of the selected directory which is not allocated to any of the DFs or EFs under the selected directory", "gsm_sim.resp.mfdf.total_mem_not_alloc_dfef",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_rfu_2,
+			{ "RFU", "gsm_sim.resp.mfdf.resp.mfdf.rfu2",
+			  FT_BYTES, BASE_NONE, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_b14,
 			{ "File Characteristics", "gsm_sim.resp.mfdf.gsm_spec.file_char",
 			  FT_UINT8, BASE_HEX, NULL, 0,
 			  NULL, HFILL }
 		},
-		{ &hf_resp_mfdf_gsm_spec_no_of_dfs,
+		{ &hf_resp_mfdf_gsm_spec_b15,
 			{ "Number of DFs in current directory", "gsm_sim.resp.mfdf.gsm_spec.no_of_dfs",
 			  FT_UINT8, BASE_DEC, NULL, 0,
-			  NULL, HFILL }
+			  "Number of DFs which are a direct child of the current directory", HFILL }
 		},
-		{ &hf_resp_mfdf_gsm_spec_no_of_efs,
-			{ "File Characteristics", "gsm_sim.resp.mfdf.gsm_spec.no_of_efs",
+		{ &hf_resp_mfdf_gsm_spec_b16,
+			{ "Number of EFs in current directory", "gsm_sim.resp.mfdf.gsm_spec.no_of_efs",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  "Number of EFs which are a direct child of the current directory", HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_b17,
+			{ "Number of CHVs, UNBLOCK CHVs and administrative codes", "gsm_sim.resp.mfdf.gsm_spec.no_of_chvs",
 			  FT_UINT8, BASE_DEC, NULL, 0,
 			  NULL, HFILL }
 		},
-		{ &hf_resp_mfdf_gsm_spec_no_of_chvs,
-			{ "File Characteristics", "gsm_sim.resp.mfdf.gsm_spec.no_of_chvs",
-			  FT_UINT8, BASE_DEC, NULL, 0,
-			  NULL, HFILL }
-		},
-		{ &hf_resp_mfdf_gsm_spec_chv1_status,
-			{ "File Characteristics", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.chv1_status",
-			  FT_UINT8, BASE_DEC, NULL, 0,
-			  NULL, HFILL }
-		},
-		{ &hf_resp_mfdf_gsm_spec_unblock_chv1_status,
-			{ "File Characteristics", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.unblock_chv1_status",
-			  FT_UINT8, BASE_DEC, NULL, 0,
-			  NULL, HFILL }
-		},
-		{ &hf_resp_mfdf_gsm_spec_chv2_status,
-			{ "File Characteristics", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.chv2_status",
-			  FT_UINT8, BASE_DEC, NULL, 0,
-			  NULL, HFILL }
-		},
-		{ &hf_resp_mfdf_gsm_spec_unblock_chv2_status,
-			{ "File Characteristics", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.unblock_chv2_status",
-			  FT_UINT8, BASE_DEC, NULL, 0,
-			  NULL, HFILL }
-		},
-		{ &hf_resp_mfdf_gsm_spec_rsvd_adm_mgmt,
-			{ "File Characteristics", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.rsvd_adm_mgmt",
+		{ &hf_resp_mfdf_gsm_spec_b18,
+			{ "RFU", "gsm_sim.resp.mfdf.resp.mfdf.gsm_spec.b18",
 			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_b19,
+			{ "CHV1 status", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.chv1_status",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_b20,
+			{ "UNBLOCK CHV1 status", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.unblock_chv1_status",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_b21,
+			{ "CHV2 status", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.chv2_status",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_b22,
+			{ "UNBLOCK CHV2 status", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.unblock_chv2_status",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_b23,
+			{ "RFU", "gsm_sim.resp.mfdf.resp.mfdf.gsm_spec.b23",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_spec_b24,
+			{ "Reserved for the administrative management", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.rsvd_adm_mgmt",
+			  FT_BYTES, BASE_NONE, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_resp_mfdf_gsm_rfu_5_b35,
+			{ "RFU", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.rfu5",
+			  FT_BYTES, BASE_NONE, NULL, 0,
 			  NULL, HFILL }
 		},
 
