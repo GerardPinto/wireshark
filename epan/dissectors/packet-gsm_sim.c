@@ -34,6 +34,7 @@ void proto_register_gsm_sim(void);
 void proto_reg_handoff_gsm_sim(void);
 
 static int proto_gsm_sim = -1;
+static int proto_gsm_sim_mfdf_resp_spec_dt = -1;
 
 /* ISO 7816-4 APDU */
 static int hf_apdu_cla_coding = -1;
@@ -373,7 +374,6 @@ static int ett_file_status = -1;
 static int ett_ef_resp_b8 = -1;
 
 /* 'GET RESPONSE' response parameters in case of MF/DF */
-//static int hf_resp_mfdf_gsm_spec_dt = -1;
 static int hf_resp_mfdf_rfu_1 = -1;
 static int hf_resp_mfdf_total_mem_not_alloc_dfef = -1;
 static int hf_resp_mfdf_rfu_2 = -1;
@@ -389,7 +389,7 @@ static int hf_resp_mfdf_gsm_spec_b21 = -1;
 static int hf_resp_mfdf_gsm_spec_b22 = -1;
 static int hf_resp_mfdf_gsm_spec_b23 = -1;
 static int hf_resp_mfdf_gsm_spec_b24 = -1;
-static int hf_resp_mfdf_gsm_rfu_5_b35 = -1;
+static int hf_resp_mfdf_gsm_spec_b35 = -1;
 
 /* 'GET RESPONSE' response parameters in case of EF */
 static int hf_resp_ef_file_size = -1;
@@ -1336,8 +1336,23 @@ dissect_bertlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
 #define ADD_ACC_CND_BYTE(byte) \
 		proto_tree_add_bitmask(tree, tvb, byte, hf_resp_ef_acc_cond_b##byte, ett_acc_cnd_b##byte, acc_cond_b##byte##_fields, ENC_BIG_ENDIAN);
 
+#define ADD_GSM_SPEC_BYTE(byte) \
+		(proto_tree_add_item(gsm_spec_dt_tree, hf_resp_mfdf_gsm_spec_b##byte, tvb, offset++, 1, ENC_BIG_ENDIAN))
+
 #define ADD_GSM_SPEC_ITEM(byte) \
-		proto_tree_add_item(tree, hf_resp_mfdf_gsm_spec_b##byte, tvb, byte-1, 1, ENC_BIG_ENDIAN);
+		if (offset >= p3) return tvb_captured_length(tvb); \
+		if (byte == 14 || byte == 19 || byte == 20 || byte == 21 || byte ==22) \
+			ADD_GSM_SPEC_BYTE(byte); \
+		else if(byte == 24) { \
+			if ((p3 - 22) > 11)  { \
+				proto_tree_add_item(gsm_spec_dt_tree, hf_resp_mfdf_gsm_spec_b24, tvb, 23, 11, ENC_BIG_ENDIAN); \
+				proto_tree_add_item(gsm_spec_dt_tree, hf_resp_mfdf_gsm_spec_b35, tvb, 34, p3, ENC_NA); \
+			} \
+			else \
+				proto_tree_add_item(gsm_spec_dt_tree, hf_resp_mfdf_gsm_spec_b24, tvb, 23, (p3 - 22) - 1, ENC_BIG_ENDIAN); \
+		} \
+		else \
+			proto_tree_add_item(gsm_spec_dt_tree, hf_resp_mfdf_gsm_spec_b##byte, tvb, offset++, 1, ENC_BIG_ENDIAN);
 
 #define P1_OFFS		0
 #define P2_OFFS		1
@@ -1353,15 +1368,25 @@ dissect_bertlv(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
 static int
 dissect_mf_or_df_response(tvbuff_t *tvb, proto_tree *tree, guint8 p3)
 {
-	proto_tree_add_item(tree, hf_resp_mfdf_rfu_1, tvb, 0 , 2, ENC_BIG_ENDIAN);
-	proto_tree_add_item(tree, hf_resp_mfdf_total_mem_not_alloc_dfef, tvb, 2 , 2, ENC_BIG_ENDIAN);
-	proto_tree_add_item(tree, hf_file_id, tvb, 4, 2, ENC_BIG_ENDIAN);
-	proto_tree_add_item(tree, hf_resp_file_type, tvb, 6, 1, ENC_BIG_ENDIAN);
-	proto_tree_add_item(tree, hf_resp_mfdf_rfu_2, tvb, 7 , 5, ENC_BIG_ENDIAN);
-	proto_tree_add_item(tree, hf_resp_len_follow_data, tvb, 12, 1, ENC_BIG_ENDIAN);
+	unsigned int offset = 0;
+
+	proto_tree_add_item(tree, hf_resp_mfdf_rfu_1, tvb, offset , 2, ENC_BIG_ENDIAN);
+	offset +=2;
+	proto_tree_add_item(tree, hf_resp_mfdf_total_mem_not_alloc_dfef, tvb, offset , 2, ENC_BIG_ENDIAN);
+	offset +=2;
+	proto_tree_add_item(tree, hf_file_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+	offset +=2;
+	proto_tree_add_item(tree, hf_resp_file_type, tvb, offset, 1, ENC_BIG_ENDIAN);
+	offset +=1;
+	proto_tree_add_item(tree, hf_resp_mfdf_rfu_2, tvb, offset , 5, ENC_BIG_ENDIAN);
+	offset +=5;
+	proto_tree_add_item(tree, hf_resp_len_follow_data, tvb, offset, 1, ENC_BIG_ENDIAN);
+	offset +=1;
 
 	/* GSM specific data */
-	//proto_tree_add_item(tree, hf_resp_mfdf_gsm_spec_dt, tvb, 0, p3, ENC_BIG_ENDIAN);
+	proto_item *mfdf_resp_spec_dt = proto_tree_add_item(tree, proto_gsm_sim_mfdf_resp_spec_dt, tvb, 0, -1, ENC_NA);
+	proto_tree *gsm_spec_dt_tree = proto_item_add_subtree(mfdf_resp_spec_dt, ett_sim);
+	
 	ADD_GSM_SPEC_ITEM(14);
 	ADD_GSM_SPEC_ITEM(15);
 	ADD_GSM_SPEC_ITEM(16);
@@ -1372,17 +1397,7 @@ dissect_mf_or_df_response(tvbuff_t *tvb, proto_tree *tree, guint8 p3)
 	ADD_GSM_SPEC_ITEM(21);
 	ADD_GSM_SPEC_ITEM(22);
 	ADD_GSM_SPEC_ITEM(23);
-	
-	int diff = p3 - 22;
-	if (diff > 0) {
-		if (diff > 11) {
-			proto_tree_add_item(tree, hf_resp_mfdf_gsm_spec_b24, tvb, 23, 11, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_resp_mfdf_gsm_rfu_5_b35, tvb, 34, p3, ENC_NA);
-		}
-		else {
-			proto_tree_add_item(tree, hf_resp_mfdf_gsm_spec_b24, tvb, 23, diff - 1, ENC_BIG_ENDIAN);
-		}
-	}
+	ADD_GSM_SPEC_ITEM(24);
 
 	return tvb_captured_length(tvb);
 }
@@ -1885,14 +1900,8 @@ proto_register_gsm_sim(void)
 			  FT_UINT8, BASE_HEX, VALS(chan_op_vals), 0,
 			  "ISO 7816-4 Logical Channel Operation", HFILL }
 		},
-		/** Get Response: specific response parameters in case of MF/DF response dissector 
-		{ &hf_resp_mfdf_gsm_spec_dt,
-			{ "GSM specific data", "gsm_sim.resp.mfdf.gsm_spec.data",
-			  FT_UINT8, BASE_HEX, NULL, 0,
-			  NULL, HFILL }
-		},
-		*/
-		/* Get Response: GSM specific data as given in ETSI 11.11 Section 9.2.1 for MF/DF response dissector */
+
+		/* Get Response: As given in ETSI 11.11 Section 9.2.1 for MF/DF response dissector */
 		{ &hf_resp_mfdf_rfu_1,
 			{ "RFU", "gsm_sim.resp.mfdf.resp.mfdf.rfu1",
 			  FT_UINT8, BASE_HEX, NULL, 0,
@@ -1908,6 +1917,7 @@ proto_register_gsm_sim(void)
 			  FT_BYTES, BASE_NONE, NULL, 0,
 			  NULL, HFILL }
 		},
+		/* Get Response: 'GSM specific data' as given in ETSI 11.11 Section 9.2.1 for MF/DF response dissector */
 		{ &hf_resp_mfdf_gsm_spec_b14,
 			{ "File Characteristics", "gsm_sim.resp.mfdf.gsm_spec.file_char",
 			  FT_UINT8, BASE_HEX, NULL, 0,
@@ -1963,7 +1973,7 @@ proto_register_gsm_sim(void)
 			  FT_BYTES, BASE_NONE, NULL, 0,
 			  NULL, HFILL }
 		},
-		{ &hf_resp_mfdf_gsm_rfu_5_b35,
+		{ &hf_resp_mfdf_gsm_spec_b35,
 			{ "RFU", "gsm_sim.gsm_sim.resp.mfdf.gsm_spec.rfu5",
 			  FT_BYTES, BASE_NONE, NULL, 0,
 			  NULL, HFILL }
@@ -1975,14 +1985,12 @@ proto_register_gsm_sim(void)
 			  FT_UINT8, BASE_DEC, NULL, 0,
 			  "Length of transparent EF or fixed/cyclic EF (record length multiplied by number of records", HFILL }
 		},
-
-		/* Get Response: Access Condition Byte 8 of EF response */
 		{ &hf_resp_ef_b8,
 			{ "EF response Byte 8", "gsm_sim.resp.ef.b8",
 			  FT_UINT8, BASE_HEX, NULL, 0,
 			  NULL, HFILL },
 		},
-
+		/* Get Response: Access Condition Byte 9 - 11 of EF response */
 		{ &hf_resp_ef_acc_cond_b9,
 			{ "Access Condition Byte 9", "gsm_sim.resp.ef.access_cnd.b9",
 			  FT_UINT8, BASE_HEX, NULL, 0,
@@ -3394,11 +3402,15 @@ proto_register_gsm_sim(void)
 	};
 
 	proto_gsm_sim = proto_register_protocol("GSM SIM 11.11", "GSM SIM",
-						 "gsm_sim");
+						 "gsm_sim");	
 
 	proto_register_field_array(proto_gsm_sim, hf, array_length(hf));
 
 	proto_register_subtree_array(ett, array_length(ett));
+
+	proto_gsm_sim_mfdf_resp_spec_dt = proto_register_protocol("GSM Specific Data", "GSM Spec Data", "gsm_sim.resp_mfdf_gsm_spec_dt");
+
+
 
 	sim_handle = register_dissector("gsm_sim", dissect_gsm_sim, proto_gsm_sim);
 	register_dissector("gsm_sim.command", dissect_gsm_sim_command, proto_gsm_sim);
