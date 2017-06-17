@@ -9235,9 +9235,11 @@ proto_registrar_dump_values(void)
 
 		PROTO_REGISTRAR_GET_NTH(i, hfinfo);
 
-		 if (hfinfo->id == hf_text_only) {
-			 continue;
-		 }
+		if (hfinfo->id == hf_text_only) {
+			continue;
+		}
+
+fprintf(stderr, "Dumping %s value string, if any\n", hfinfo->abbrev);
 
 		/* ignore protocols */
 		if (proto_registrar_is_protocol(i)) {
