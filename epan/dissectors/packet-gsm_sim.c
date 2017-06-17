@@ -1539,7 +1539,11 @@ dissect_gsm_apdu(guint8 ins, guint8 p1, guint8 p2, guint8 p3, tvbuff_t *tvb,
 		/* FIXME: parse response */
 		break;
 	case 0xF2: /* STATUS */
-		/* FIXME: parse response */
+		proto_tree_add_item(tree, hf_le, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
+		if (isSIMtrace) {
+			subtvb = tvb_new_subset_length(tvb, offset+DATA_OFFS, p3);
+			dissect_mf_or_df_response(subtvb, tree, p3);
+		}
 		break;
 	case 0xB0: /* READ BINARY */
 		col_append_fstr(pinfo->cinfo, COL_INFO, "Offset=%u ", p1 << 8 | p2);
@@ -1670,7 +1674,7 @@ dissect_gsm_apdu(guint8 ins, guint8 p1, guint8 p2, guint8 p3, tvbuff_t *tvb,
 	case 0xC0: /* GET RESPONSE */
 		proto_tree_add_item(tree, hf_le, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
 		if (isSIMtrace) {
-			proto_tree_add_item(tree, hf_apdu_data, tvb, offset+DATA_OFFS, p3, ENC_NA);
+			//proto_tree_add_item(tree, hf_apdu_data, tvb, offset+DATA_OFFS, p3, ENC_NA);
 			g8 = tvb_get_guint8(tvb, offset+DATA_OFFS + 6);
 			subtvb = tvb_new_subset_length(tvb, offset+DATA_OFFS, p3);
 
